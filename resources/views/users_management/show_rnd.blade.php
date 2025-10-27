@@ -1,0 +1,102 @@
+@extends('layouts.app')
+
+@section('content')
+<section class="app-user-list">
+  <div class="row" id="basic-table">
+    <div class="col-12">
+      <div class="card">
+
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <h4 class="card-title">Daftar Akun R&amp;D</h4>
+          <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalTambahRND">
+            Tambah Akun R&amp;D
+          </button>
+        </div>
+
+        {{-- Modal Tambah R&D --}}
+        <div class="modal fade text-start" id="modalTambahRND" tabindex="-1" aria-hidden="true">
+          <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+              <div class="modal-header">
+                <h4 class="modal-title">Tambahkan Akun R&amp;D</h4>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+              </div>
+              <form action="{{ route('show-rnd') }}" method="POST">
+                @csrf
+                <div class="modal-body">
+                  <label>Nama:</label>
+                  <div class="mb-1">
+                    <input type="text" name="name" class="form-control" placeholder="Masukkan Nama">
+                  </div>
+                  @error('name') <div class="text-danger mt-1">{{ $message }}</div> @enderror
+
+                  <label>Email:</label>
+                  <div class="mb-1">
+                    <input type="email" name="email" class="form-control" placeholder="Masukkan Alamat Email">
+                  </div>
+                  @error('email') <div class="text-danger mt-1">{{ $message }}</div> @enderror
+
+                  <label>Password:</label>
+                  <div class="mb-1">
+                    <input type="password" name="password" class="form-control" placeholder="Masukkan Password">
+                  </div>
+                  @error('password') <div class="text-danger mt-1">{{ $message }}</div> @enderror
+                </div>
+                <div class="modal-footer">
+                  <button type="submit" class="btn btn-primary">Daftar</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+
+        <div class="table-responsive">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Nama</th>
+                <th>Email</th>
+                <th>Role</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              @forelse ($users as $user)
+                <tr>
+                  <td>{{ $user->name }}</td>
+                  <td>{{ $user->email }}</td>
+                  <td><span class="badge rounded-pill badge-light-primary me-1">{{ $user->role }}</span></td>
+                  <td>
+                    <div class="dropdown">
+                      <button type="button" class="btn btn-sm dropdown-toggle hide-arrow" data-bs-toggle="dropdown">
+                        <i data-feather="more-vertical"></i>
+                      </button>
+                      <div class="dropdown-menu">
+                        <a class="dropdown-item" href="{{ route('edit-rnd', ['id' => $user->id]) }}">
+                          <i data-feather="edit-2" class="me-50"></i><span>Edit</span>
+                        </a>
+                        <form action="{{ route('delete-rnd', ['id' => $user->id]) }}"
+                              method="POST"
+                              onsubmit="return confirm('Hapus akun R&amp;D ini?')">
+                          @csrf
+                          @method('DELETE')
+                          <button class="dropdown-item" type="submit">
+                            <i data-feather="trash" class="me-50"></i><span>Delete</span>
+                          </button>
+                        </form>
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+              @empty
+                <tr><td colspan="4" class="text-center text-muted">Belum ada akun R&amp;D</td></tr>
+              @endforelse
+            </tbody>
+          </table>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</section>
+@endsection
