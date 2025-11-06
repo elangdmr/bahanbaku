@@ -42,9 +42,17 @@
                     <td>{{ isset($r->jumlah) ? rtrim(rtrim(number_format((float)$r->jumlah, 2, '.', ''), '0'), '.') : '0' }} {{ $r->satuan ?? 'gr' }}</td>
                     <td><span class="badge rounded-pill {{ $r->status_badge }}">{{ $r->status_label }}</span></td>
                     <td class="text-end text-nowrap">
+                      {{-- Riwayat: tetap di tab ini + origin & tab --}}
                       <a class="btn btn-outline-secondary btn-sm me-50"
-                         href="{{ route('riwayat.detail', ['type'=>'pb','id'=>$r->id,'modul'=>'Sampling PCH']) }}"
-                         target="_blank" rel="noopener">Riwayat</a>
+                         href="{{ route('riwayat.detail', [
+                           'type'       => 'pb',
+                           'id'         => $r->id,
+                           'modul'      => 'ALL',
+                           'origin'     => 'Sampling PCH',
+                           'origin_tab' => 'pending'
+                         ]) }}">
+                        Riwayat
+                      </a>
                       <a href="{{ route('sampling-pch.edit', $r->id) }}" class="btn btn-outline-primary btn-sm">Edit</a>
                     </td>
                   </tr>
@@ -78,8 +86,15 @@
                     <td><span class="badge rounded-pill {{ $r->status_badge }}">{{ $r->status_label }}</span></td>
                     <td class="text-end text-nowrap">
                       <a class="btn btn-outline-secondary btn-sm"
-                         href="{{ route('riwayat.detail', ['type'=>'pb','id'=>$r->id,'modul'=>'Sampling PCH']) }}"
-                         target="_blank" rel="noopener">Riwayat</a>
+                         href="{{ route('riwayat.detail', [
+                           'type'       => 'pb',
+                           'id'         => $r->id,
+                           'modul'      => 'Sampling PCH',
+                           'origin'     => 'Sampling PCH',
+                           'origin_tab' => 'history'
+                         ]) }}">
+                        Riwayat
+                      </a>
                     </td>
                   </tr>
                 @empty

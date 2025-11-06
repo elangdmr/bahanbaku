@@ -40,10 +40,17 @@
                     <td>{{ $r->bahan_nama ?? '-' }}</td>
                     <td><span class="badge rounded-pill {{ $r->status_badge }}">{{ $r->status_label }}</span></td>
                     <td class="text-end text-nowrap">
-                      {{-- Riwayat realtime progress bahan di modul Uji COA --}}
+                      {{-- Riwayat: tetap di tab ini (bukan _blank) + kirim origin & tab --}}
                       <a class="btn btn-outline-secondary btn-sm"
-   href="{{ route('riwayat.detail', ['type' => 'pb', 'id' => $r->id, 'modul' => 'ALL', 'origin' => 'Purchasing']) }}"
-   target="_blank" rel="noopener">Riwayat</a>
+                         href="{{ route('riwayat.detail', [
+                           'type' => 'pb',
+                           'id' => $r->id,
+                           'modul' => 'ALL',
+                           'origin' => 'Uji COA',
+                           'origin_tab' => 'pending'
+                         ]) }}">
+                        Riwayat
+                      </a>
 
                       {{-- Edit hasil / konfirmasi COA --}}
                       <a href="{{ route('uji-coa.edit', $r->id) }}" class="btn btn-outline-primary btn-sm">Edit</a>
@@ -79,8 +86,15 @@
                     <td><span class="badge rounded-pill {{ $r->status_badge }}">{{ $r->status_label }}</span></td>
                     <td class="text-end text-nowrap">
                       <a class="btn btn-outline-secondary btn-sm"
-                         href="{{ route('riwayat.detail', ['type' => 'pb', 'id' => $r->id, 'modul' => 'Uji COA']) }}"
-                         target="_blank" rel="noopener">Riwayat</a>
+                         href="{{ route('riwayat.detail', [
+                           'type' => 'pb',
+                           'id' => $r->id,
+                           'modul' => 'Uji COA',
+                           'origin' => 'Uji COA',
+                           'origin_tab' => 'history'
+                         ]) }}">
+                        Riwayat
+                      </a>
                     </td>
                   </tr>
                 @empty

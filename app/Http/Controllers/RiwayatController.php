@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Route as RouteFacade;
 
 class RiwayatController extends Controller
 {
@@ -36,12 +37,7 @@ class RiwayatController extends Controller
     }
 
     /**
-     * Bangun event dari satu baris PB.
-     * Jika $filterModul null => semua modul PB.
-     * Event yang dikembalikan SELALU menyertakan:
-     *  - pb_id
-     *  - link       -> riwayat ALL (recommended)
-     *  - link_modul -> riwayat modul spesifik (opsional)
+     * Bangun event dari satu baris PB (filter by modul kalau diset).
      */
     private function buildPbEvents(object $row, ?string $filterModul = null): array
     {
@@ -65,9 +61,7 @@ class RiwayatController extends Controller
                 'status'      => $status,
                 'keterangan'  => $this->withSubmitter($ket, $email),
                 'pb_id'       => $row->id,
-                // default ke riwayat lengkap:
                 'link'        => route('riwayat.detail', ['type' => 'pb', 'id' => $row->id, 'modul' => 'ALL']),
-                // opsional kalau mau per-modul:
                 'link_modul'  => route('riwayat.detail', ['type' => 'pb', 'id' => $row->id, 'modul' => $modul]),
             ];
         };
@@ -142,8 +136,9 @@ class RiwayatController extends Controller
             'permintaan'   => ['route' => 'permintaan-bahan.index','label' => 'Permintaan Bahan',  'query' => ['focus' => $id]],
             'uji coa'      => ['route' => 'uji-coa.index',         'label' => 'Hasil Uji COA',     'query' => ['focus' => $id]],
             'sampling pch' => ['route' => 'sampling-pch.index',    'label' => 'Sampling PCH',      'query' => ['focus' => $id]],
-            'halal'        => ['route' => 'halal.index',           'label' => 'Halal PPIC',        'query' => ['focus' => $id]], // ← perbaikan
-            'trial r&d'    => ['route' => 'trial-rd.index',        'label' => 'Trial R&D',         'query' => ['focus' => $id]],
+            'halal'        => ['route' => 'halal.index',           'label' => 'Halal PPIC',        'query' => ['focus' => $id]],
+            // FIX nama rute: trial-rnd.index (bukan trial-rd.index)
+            'trial r&d'    => ['route' => 'trial-rnd.index',       'label' => 'Trial R&D',         'query' => ['focus' => $id]],
             'registrasi'   => ['route' => 'registrasi.index',      'label' => 'Registrasi',        'query' => ['focus' => $id]],
             default        => ['route' => 'riwayat.index',         'label' => 'Riwayat Proses',    'query' => []],
         };
@@ -237,23 +232,21 @@ class RiwayatController extends Controller
         }
 
         // Filter UI
-       // Filter UI
-$q    = trim($r->input('q', ''));
-$mod  = trim($r->input('modul', ''));
-$from = $r->input('from');
-$to   = $r->input('to');
+        $q    = trim($r->input('q', ''));
+        $mod  = trim($r->input('modul', ''));
+        $from = $r->input('from');
+        $to   = $r->input('to');
 
-$events = $events->filter(function($e) use ($q, $mod, $from, $to) {
-    if ($q !== '' &&
-        stripos($e['kode'].' '.$e['bahan'].' '.$e['peristiwa'].' '.($e['status'] ?? '').' '.($e['keterangan'] ?? ''), $q) === false) {
-        return false;
-    }
-    if ($mod !== '' && $e['modul'] !== $mod) return false;
-    if ($from && substr((string)$e['tanggal'], 0, 10) < $from) return false;
-    if ($to   && substr((string)$e['tanggal'], 0, 10) > $to)   return false;
-    return true;
-})->sortByDesc('tanggal')->values();
-
+        $events = $events->filter(function($e) use ($q, $mod, $from, $to) {
+            if ($q !== '' &&
+                stripos($e['kode'].' '.$e['bahan'].' '.$e['peristiwa'].' '.($e['status'] ?? '').' '.($e['keterangan'] ?? ''), $q) === false) {
+                return false;
+            }
+            if ($mod !== '' && $e['modul'] !== $mod) return false;
+            if ($from && substr((string)$e['tanggal'], 0, 10) < $from) return false;
+            if ($to   && substr((string)$e['tanggal'], 0, 10) > $to)   return false;
+            return true;
+        })->sortByDesc('tanggal')->values();
 
         $modulList = ['Permintaan','Purchasing','Sampling PCH','Uji COA','Halal','Trial R&D','Registrasi'];
 
@@ -267,8 +260,9 @@ $events = $events->filter(function($e) use ($q, $mod, $from, $to) {
     /* =================== DETAIL (PDF/HTML) =================== */
     public function detail(Request $r, string $type, int $id)
     {
-        $origin      = $r->query('origin');
-        $targetModul = $r->query('modul');         // 'ALL' / 'Purchasing' / dst.
+        $origin      = $r->query('origin');                    // asal menu (opsional)
+        $originTab   = strtolower($r->query('origin_tab', ''));// pending/history (opsional)
+        $targetModul = $r->query('modul');                     // 'ALL' / 'Purchasing' / dst.
         $isAll       = !$targetModul || in_array(strtolower($targetModul), ['all','semua']);
         $filterModul = $isAll ? null : $targetModul;
 
@@ -429,12 +423,23 @@ $events = $events->filter(function($e) use ($q, $mod, $from, $to) {
             ];
         }
 
-        // Tombol Kembali
+        // === Tombol Kembali: hormati asal semua modul bertab ===
         $meta = $this->backMeta($origin ?: $targetModul, $type, $id);
-        $viewData['back_label'] = $meta['label'];
-        $viewData['back_url']   = route($meta['route'], $meta['query'] ?? []);
+        $originLower = strtolower((string)$origin);
+        $modsWithTabs = ['purchasing','uji coa','halal','sampling pch','trial r&d','registrasi'];
 
-        // Render
+        if (in_array($originLower, $modsWithTabs, true)) {
+            $meta['query']['tab']   = ($originTab === 'history') ? 'history' : 'pending';
+            $meta['query']['focus'] = $id;
+        }
+
+        $viewData['back_label'] = $meta['label'];
+        // Guard: jika nama route belum ada, fallback ke riwayat.index
+        $viewData['back_url'] = RouteFacade::has($meta['route'])
+            ? route($meta['route'], $meta['query'] ?? [])
+            : route('riwayat.index');
+
+        // Render PDF jika dompdf ada; fallback ke HTML
         $fileName = 'Riwayat_'.$viewData['kode'].'_'.str_replace(' ', '_', $viewData['modul']).'.pdf';
         try {
             if (app()->bound('dompdf.wrapper')) {

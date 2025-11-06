@@ -48,12 +48,19 @@
                     <td>{{ $r->alasan ?? '-' }}</td>
                     <td>{{ !empty($r->tanggal_kebutuhan) ? \Carbon\Carbon::parse($r->tanggal_kebutuhan)->format('d/m/Y') : '-' }}</td>
                     <td class="text-end text-nowrap">
-                      {{-- EDIT: tombol Riwayat (realtime progress bahan) --}}
-                     <a class="btn btn-outline-secondary btn-sm"
-   href="{{ route('riwayat.detail', ['type' => 'pb', 'id' => $r->id, 'modul' => 'ALL', 'origin' => 'Purchasing']) }}"
-   target="_blank" rel="noopener">Riwayat</a>
+                      {{-- Riwayat: tetap kembali ke tab "pending" --}}
+                      <a class="btn btn-outline-secondary btn-sm"
+                         href="{{ route('riwayat.detail', [
+                           'type' => 'pb',
+                           'id' => $r->id,
+                           'modul' => 'ALL',
+                           'origin' => 'Purchasing',
+                           'origin_tab' => 'pending'
+                         ]) }}">
+                        Riwayat
+                      </a>
 
-                      {{-- Hanya Edit. Accept sekarang ada di halaman Edit (button modal). --}}
+                      {{-- Edit --}}
                       <a href="{{ route('purch-vendor.edit', $r->id) }}" class="btn btn-outline-primary btn-sm">Edit</a>
                     </td>
                   </tr>
@@ -76,7 +83,6 @@
                     <th>Nama Bahan</th>
                     <th>Status</th>
                     <th>Tgl COA Diterima</th>
-                    {{-- EDIT: kolom Aksi untuk akses riwayat dari tab riwayat juga --}}
                     <th class="text-end">Aksi</th>
                   </tr>
                 </thead>
@@ -92,11 +98,16 @@
                       </span>
                     </td>
                     <td>{{ !empty($r->tgl_coa_diterima) ? \Carbon\Carbon::parse($r->tgl_coa_diterima)->format('d/m/Y') : '-' }}</td>
-                    {{-- EDIT: tombol Riwayat di tab Riwayat --}}
                     <td class="text-end text-nowrap">
+                      {{-- Riwayat: tetap kembali ke tab "history" --}}
                       <a class="btn btn-outline-secondary btn-sm"
-                         href="{{ route('riwayat.detail', ['type' => 'pb', 'id' => $r->id, 'modul' => 'Purchasing']) }}"
-                         target="_blank" rel="noopener">
+                         href="{{ route('riwayat.detail', [
+                           'type' => 'pb',
+                           'id' => $r->id,
+                           'modul' => 'Purchasing',
+                           'origin' => 'Purchasing',
+                           'origin_tab' => 'history'
+                         ]) }}">
                         Riwayat
                       </a>
                     </td>

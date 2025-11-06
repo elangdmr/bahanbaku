@@ -2,7 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 
-/* ===== Controller imports (only the ones we actually use) ===== */
+/* ===== Controller imports ===== */
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\DashboardController;
 
@@ -17,6 +17,8 @@ use App\Http\Controllers\TrialRndController;
 use App\Http\Controllers\RegistrasiController;
 use App\Http\Controllers\BahanController;
 use App\Http\Controllers\RiwayatController;
+use App\Http\Controllers\MetrikRegistrasiController;
+use App\Http\Controllers\ProdukController; // <-- Master Produk
 
 /* ====================================================================
  * AUTH
@@ -68,10 +70,9 @@ Route::middleware(['auth'])->group(function () {
         });
 
     /* ======================= RIWAYAT (semua user) ======================= */
-Route::get('/riwayat', [RiwayatController::class, 'index'])->name('riwayat.index');
-Route::get('/riwayat/{kode}/show', [RiwayatController::class, 'show'])->name('riwayat.show'); // halaman web
-Route::get('/riwayat/{type}/{id}/detail', [RiwayatController::class, 'detail'])->name('riwayat.detail'); // PDF
-
+    Route::get('/riwayat', [RiwayatController::class, 'index'])->name('riwayat.index');
+    Route::get('/riwayat/{kode}/show', [RiwayatController::class, 'show'])->name('riwayat.show');
+    Route::get('/riwayat/{type}/{id}/detail', [RiwayatController::class, 'detail'])->name('riwayat.detail');
 
     /* ======================= ADMIN + R&D (modul kerja) ======================= */
     Route::middleware('role:Admin,R&D')->group(function () {
@@ -100,7 +101,7 @@ Route::get('/riwayat/{type}/{id}/detail', [RiwayatController::class, 'detail'])-
             Route::put('/{id}',         [TrialRndController::class, 'update'])->name('update');
             Route::get('/{id}/confirm', [TrialRndController::class, 'confirmForm'])->name('confirm.form');
             Route::put('/{id}/confirm', [TrialRndController::class, 'confirmUpdate'])->name('confirm.update');
-            Route::put('/{id}/add-qty', [TrialRndController::class, 'addQty'])->name('add-qty'); // kirim balik qty ke Sampling
+            Route::put('/{id}/add-qty', [TrialRndController::class, 'addQty'])->name('add-qty');
         });
 
         /* ---------- REGISTRASI NIE ---------- */
@@ -111,6 +112,35 @@ Route::get('/riwayat/{type}/{id}/detail', [RiwayatController::class, 'detail'])-
             Route::get('/{id}/confirm', [RegistrasiController::class, 'confirmForm'])->name('confirm.form');
             Route::put('/{id}/confirm', [RegistrasiController::class, 'confirmUpdate'])->name('confirm.update');
         });
+
+        /* ---------- METRIK REGISTRASI (matrix perbandingan) ---------- */
+        Route::get('/registrasi-metrik',                   [MetrikRegistrasiController::class, 'index'])->name('registrasi.metrik');
+        Route::get('/registrasi-metrik/{id}/edit',         [MetrikRegistrasiController::class, 'edit'])->name('registrasi.metrik.edit');
+        Route::put('/registrasi-metrik/{id}',              [MetrikRegistrasiController::class, 'update'])->name('registrasi.metrik.update');
+        Route::get('/registrasi-metrik/{id}/confirm',      [MetrikRegistrasiController::class, 'confirmForm'])->name('registrasi.metrik.confirm.form');
+        Route::put('/registrasi-metrik/{id}/confirm',      [MetrikRegistrasiController::class, 'confirmUpdate'])->name('registrasi.metrik.confirm.update');
+        Route::post('/registrasi-metrik/{id}/komposisi',   [MetrikRegistrasiController::class, 'komposisiAdd'])->name('registrasi.metrik.komposisi.add');
+        Route::delete('/registrasi-metrik/{id}/komposisi/{linkId}',
+                                                         [MetrikRegistrasiController::class, 'komposisiDelete'])->name('registrasi.metrik.komposisi.delete');
+
+        // Tambahan untuk panel "Master Produk & Komposisi"
+        Route::prefix('registrasi-metrik')->name('registrasi.metrik.')->group(function () {
+            Route::delete('/produk-bahan/{id}',   [MetrikRegistrasiController::class,'produkBahanDestroy'])->name('produk_bahan.destroy');
+            Route::post('/produk-bahan/confirm',  [MetrikRegistrasiController::class,'produkBahanConfirm'])->name('produk_bahan.confirm');
+            Route::get('/export/komposisi.csv',   [MetrikRegistrasiController::class,'exportKomposisi'])->name('export');
+        });
+
+        /* ---------- MASTER PRODUK ---------- */
+        Route::prefix('produk')->name('produk.')->group(function () {
+            Route::get('/',          [ProdukController::class, 'index'])->name('index');
+            Route::get('/create',    [ProdukController::class, 'create'])->name('create');
+            Route::post('/',         [ProdukController::class, 'store'])->name('store');
+            Route::get('/{id}/edit', [ProdukController::class, 'edit'])->name('edit');
+            Route::put('/{id}',      [ProdukController::class, 'update'])->name('update');
+            Route::delete('/{id}',   [ProdukController::class, 'destroy'])->name('destroy');
+        });
+        // Quick-add produk dari halaman metrik
+        Route::post('/registrasi-metrik/produk', [ProdukController::class, 'store'])->name('registrasi.metrik.produk.store');
     });
 
     /* ====================================================================
@@ -122,25 +152,25 @@ Route::get('/riwayat/{type}/{id}/detail', [RiwayatController::class, 'detail'])-
         Route::middleware(['admin'])->group(function () {
 
             // R&D
-            Route::get('/show-rnd',                [UserController::class, 'showRND'])->name('show-rnd');
-            Route::post('/show-rnd',               [UserController::class, 'storeRND']);
-            Route::get('/show-rnd/{id}/edit',      [UserController::class, 'editRND'])->name('edit-rnd');
-            Route::put('/show-rnd/{id}',           [UserController::class, 'updateRND']);
-            Route::delete('/show-rnd/{id}',        [UserController::class, 'destroy'])->name('delete-rnd');
+            Route::get('/show-rnd',                 [UserController::class, 'showRND'])->name('show-rnd');
+            Route::post('/show-rnd',                [UserController::class, 'storeRND']);
+            Route::get('/show-rnd/{id}/edit',       [UserController::class, 'editRND'])->name('edit-rnd');
+            Route::put('/show-rnd/{id}',            [UserController::class, 'updateRND']);
+            Route::delete('/show-rnd/{id}',         [UserController::class, 'destroy'])->name('delete-rnd');
 
             // PPIC
-            Route::get('/show-ppic',               [UserController::class, 'showPPIC'])->name('show-ppic');
-            Route::post('/show-ppic',              [UserController::class, 'storePPIC']);
-            Route::get('/show-ppic/{id}/edit',     [UserController::class, 'editPPIC'])->name('edit-ppic');
-            Route::put('/show-ppic/{id}',          [UserController::class, 'updatePPIC']);
-            Route::delete('/show-ppic/{id}',       [UserController::class, 'destroy'])->name('delete-ppic');
+            Route::get('/show-ppic',                [UserController::class, 'showPPIC'])->name('show-ppic');
+            Route::post('/show-ppic',               [UserController::class, 'storePPIC']);
+            Route::get('/show-ppic/{id}/edit',      [UserController::class, 'editPPIC'])->name('edit-ppic');
+            Route::put('/show-ppic/{id}',           [UserController::class, 'updatePPIC']);
+            Route::delete('/show-ppic/{id}',        [UserController::class, 'destroy'])->name('delete-ppic');
 
             // Purchasing
-            Route::get('/show-purchasing',         [UserController::class, 'showPurchasing'])->name('show-purchasing');
-            Route::post('/show-purchasing',        [UserController::class, 'storePurchasing']);
+            Route::get('/show-purchasing',          [UserController::class, 'showPurchasing'])->name('show-purchasing');
+            Route::post('/show-purchasing',         [UserController::class, 'storePurchasing']);
             Route::get('/show-purchasing/{id}/edit',[UserController::class, 'editPurchasing'])->name('edit-purchasing');
-            Route::put('/show-purchasing/{id}',    [UserController::class, 'updatePurchasing']);
-            Route::delete('/show-purchasing/{id}', [UserController::class, 'destroy'])->name('delete-purchasing');
+            Route::put('/show-purchasing/{id}',     [UserController::class, 'updatePurchasing']);
+            Route::delete('/show-purchasing/{id}',  [UserController::class, 'destroy'])->name('delete-purchasing');
 
             /* ================= MASTER DATA (khusus admin) ================= */
             Route::resource('master-bahan', BahanController::class)
@@ -152,7 +182,7 @@ Route::get('/riwayat/{type}/{id}/detail', [RiwayatController::class, 'detail'])-
     /* ===== AUTH & PROFILE ===== */
     Route::post('/logout', [UserController::class, 'logout'])->name('logout');
 
-    Route::get('show-profile',            [UserController::class, 'profile'])->name('show-profile');
-    Route::put('show-profile/general',    [UserController::class, 'updateGeneral'])->name('edit-general');
-    Route::put('show-profile',            [UserController::class, 'updatePassword'])->name('edit-password');
+    Route::get('show-profile',         [UserController::class, 'profile'])->name('show-profile');
+    Route::put('show-profile/general', [UserController::class, 'updateGeneral'])->name('edit-general');
+    Route::put('show-profile',         [UserController::class, 'updatePassword'])->name('edit-password');
 });

@@ -23,30 +23,26 @@ class UjiCoaController extends Controller
 
     private function isAdmin(): bool
     {
-        $role = strtolower(Auth::user()->role ?? '');
+        $role = strtolower(auth()->user()->role ?? '');
         return in_array($role, ['admin','administrator','superadmin'], true);
     }
 
     /** Hias record untuk tampilan */
     private function decorate(object $r): object
     {
-        // Kode PB-XX(.N)
         $base    = 'PB-' . str_pad((string)($r->bahan_id ?? 0), 2, '0', STR_PAD_LEFT);
         $ulang   = (int)($r->ulang_ke ?? 0);
         $r->kode = $ulang > 0 ? "{$base}.{$ulang}" : $base;
 
-        // detail_uji → array
         $arr = [];
         if (property_exists($r, 'detail_uji') && !is_null($r->detail_uji)) {
             $arr = is_array($r->detail_uji) ? $r->detail_uji : (json_decode($r->detail_uji, true) ?: []);
         }
         $r->detail_uji = $arr;
 
-        // hasil terakhir (draft)
         $last              = end($arr) ?: null;
         $r->hasil_terakhir = $last['hasil'] ?? ($r->hasil_uji ?? null);
 
-        // flags
         $r->lock_all      = ($r->hasil_terakhir === 'Lulus') || (($r->status ?? null) === self::STATUS_OK);
         $r->lock_existing = (!$r->lock_all && count($arr) > 0);
         $r->can_add_row   = !$r->lock_all;
@@ -57,7 +53,6 @@ class UjiCoaController extends Controller
             $r->can_add_row   = true;
         }
 
-        // label & badge
         if (($r->status ?? null) === self::STATUS_OK) {
             $r->status_label = 'Lulus Uji COA';
         } elseif (($r->status ?? null) === self::STATUS_NOK) {
@@ -83,11 +78,12 @@ class UjiCoaController extends Controller
 
     public function index()
     {
-        // Pending: status COA ATAU ada kolom COA terisi tetapi belum Approved/Rejected/Proses Halal
+        // Pending
         $pending = DB::table($this->tbl.' as p')
             ->leftJoin('bahans as b', 'b.id', '=', 'p.bahan_id')
             ->select('p.*', 'b.nama as bahan_nama')
             ->where(function ($q) {
+                // masih di fase COA atau ada data COA tapi belum final dialihkan
                 $q->where('p.status', self::STATUS_COA)
                   ->orWhere(function ($w) {
                       $w->whereNotNull('p.tgl_permintaan_coa')
@@ -97,16 +93,21 @@ class UjiCoaController extends Controller
                         ->orWhereNotNull('p.hasil_uji');
                   });
             })
+            // exclude yang sudah final (OK/NOK) atau sudah dialihkan ke Halal
             ->whereNotIn('p.status', [self::STATUS_OK, self::STATUS_NOK, self::STATUS_HALAL])
             ->orderByDesc('p.updated_at')
             ->get()
             ->map(fn ($r) => $this->decorate($r));
 
-        // History (final di COA)
+        // History: yang sudah final di COA (OK/NOK) ATAU sudah Lulus dan dialihkan (status HALAL),
+        // ATAU minimal hasil_uji sudah Lulus/Tidak Lulus.
         $history = DB::table($this->tbl.' as p')
             ->leftJoin('bahans as b', 'b.id', '=', 'p.bahan_id')
             ->select('p.*', 'b.nama as bahan_nama')
-            ->whereIn('p.status', [self::STATUS_OK, self::STATUS_NOK])
+            ->where(function ($q) {
+                $q->whereIn('p.status', [self::STATUS_OK, self::STATUS_NOK, self::STATUS_HALAL])
+                  ->orWhereIn('p.hasil_uji', ['Lulus','Tidak Lulus']);
+            })
             ->orderByDesc('p.updated_at')
             ->get()
             ->map(fn ($r) => $this->decorate($r));
@@ -143,7 +144,6 @@ class UjiCoaController extends Controller
             return back()->withErrors(['form' => 'Data sudah Lulus dan terkunci.'])->withInput();
         }
 
-        // Ambil detail dari form
         $inputDetails = $r->input('details', []);
         $clean = [];
         foreach ($inputDetails as $row) {
@@ -162,7 +162,6 @@ class UjiCoaController extends Controller
             }
         }
 
-        // Non-admin tak boleh ubah baris lama jika ada riwayat
         if ($deco->lock_existing && !$isAdmin) {
             $existing   = is_array($deco->detail_uji) ? $deco->detail_uji : [];
             $newDetails = array_values(array_merge($existing, $clean));
@@ -175,16 +174,14 @@ class UjiCoaController extends Controller
 
         $update = ['updated_at' => now()];
 
-        // tanggal COA (draft / edit)
         if (Schema::hasColumn($this->tbl, 'tgl_permintaan_coa')) $update['tgl_permintaan_coa'] = $r->tgl_permintaan_coa ?: $raw->tgl_permintaan_coa;
         if (Schema::hasColumn($this->tbl, 'est_coa_diterima'))  $update['est_coa_diterima']  = $r->est_coa_diterima  ?: $raw->est_coa_diterima;
         if (Schema::hasColumn($this->tbl, 'tgl_coa_diterima'))  $update['tgl_coa_diterima']  = $r->tgl_coa_diterima  ?: $raw->tgl_coa_diterima;
 
         if (Schema::hasColumn($this->tbl, 'keterangan')) $update['keterangan'] = $r->keterangan;
         if (Schema::hasColumn($this->tbl, 'detail_uji')) $update['detail_uji'] = json_encode($newDetails);
-        if (Schema::hasColumn($this->tbl, 'hasil_uji'))  $update['hasil_uji']  = $lastHasil; // jejak draft
+        if (Schema::hasColumn($this->tbl, 'hasil_uji'))  $update['hasil_uji']  = $lastHasil;
 
-        // Pastikan status masuk COA bila masih kosong / tidak sesuai
         $allowed = [self::STATUS_COA, self::STATUS_OK, self::STATUS_NOK, self::STATUS_PURCH, self::STATUS_HALAL];
         if (Schema::hasColumn($this->tbl, 'status') && !in_array($raw->status ?? '', $allowed, true)) {
             $update['status'] = self::STATUS_COA;
@@ -236,32 +233,25 @@ class UjiCoaController extends Controller
                 'hasil_uji'  => $approved ? 'Lulus' : 'Tidak Lulus',
             ];
 
-            // pastikan ada tanggal COA diterima
             if (Schema::hasColumn($this->tbl, 'tgl_coa_diterima')) {
                 $update['tgl_coa_diterima'] = $r->tgl_coa_diterima ?: ($current->tgl_coa_diterima ?: $now->toDateString());
             }
 
             if ($approved) {
-                // FINAL COA → lanjut Halal pada ROW yang sama (tanpa duplikasi)
                 if (Schema::hasColumn($this->tbl, 'status'))         $update['status'] = self::STATUS_HALAL;
-                if (Schema::hasColumn($this->tbl, 'detail_uji'))     { /* biarkan jejak uji */ }
-                if (Schema::hasColumn($this->tbl, 'tgl_pengajuan'))  $update['tgl_pengajuan'] = $now->toDateString(); // seed Halal
-                if (Schema::hasColumn($this->tbl, 'proses'))         $update['proses'] = json_encode([]);             // kosongkan jejak Halal
-                if (Schema::hasColumn($this->tbl, 'keterangan'))     { /* biarkan kalau mau */ }
+                if (Schema::hasColumn($this->tbl, 'tgl_pengajuan'))  $update['tgl_pengajuan'] = $now->toDateString();
+                if (Schema::hasColumn($this->tbl, 'proses'))         $update['proses'] = json_encode([]);
                 if (Schema::hasColumn($this->tbl, 'hasil_halal'))    $update['hasil_halal'] = null;
                 if (Schema::hasColumn($this->tbl, 'tgl_verifikasi')) $update['tgl_verifikasi'] = null;
             } else {
-                // TIDAK LULUS → kembali ke Purchasing pada ROW yang sama (tanpa duplikasi)
                 if (Schema::hasColumn($this->tbl, 'status')) $update['status'] = self::STATUS_PURCH;
 
-                // reset bidang COA agar Purchasing mulai ulang
                 if (Schema::hasColumn($this->tbl, 'tgl_permintaan_coa')) $update['tgl_permintaan_coa'] = null;
                 if (Schema::hasColumn($this->tbl, 'est_coa_diterima'))   $update['est_coa_diterima']   = null;
                 if (Schema::hasColumn($this->tbl, 'tgl_coa_diterima'))   $update['tgl_coa_diterima']   = null;
                 if (Schema::hasColumn($this->tbl, 'detail_uji'))         $update['detail_uji']         = json_encode([]);
                 if (Schema::hasColumn($this->tbl, 'keterangan'))         $update['keterangan']         = null;
 
-                // naikkan ulang_ke bila kolomnya ada
                 if (Schema::hasColumn($this->tbl, 'ulang_ke')) {
                     $update['ulang_ke'] = DB::raw('COALESCE(ulang_ke,0)+1');
                 }

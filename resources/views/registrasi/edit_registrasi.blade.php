@@ -3,11 +3,21 @@
 @php
   use Carbon\Carbon;
 
+  // flag dari controller
+  $isAdmin = (bool)($isAdmin ?? false);
+
   // Repeater data
   $proses        = is_array($row->proses ?? null) ? $row->proses : [];
-  $lockAll       = (bool)($row->lock_all ?? false);         // kunci total (Dokumen Lengkap / hasil final)
-  $lockExisting  = (bool)($row->lock_existing ?? false);    // kunci baris existing, boleh tambah baris baru
-  $canAdd        = (bool)($row->can_add_row ?? false);      // munculkan tombol +Tambah Proses?
+  $lockAll       = (bool)($row->lock_all ?? false);
+  $lockExisting  = (bool)($row->lock_existing ?? false);
+  $canAdd        = (bool)($row->can_add_row ?? false);
+
+  // ==== OVERRIDE untuk admin: semuanya boleh edit ====
+  if ($isAdmin) {
+    $lockAll      = false;
+    $lockExisting = false;
+    $canAdd       = true;
+  }
 @endphp
 
 @section('content')
@@ -27,22 +37,28 @@
         <div class="card-body">
 
           {{-- Banner info lock --}}
-          @if($lockAll)
-            <div class="alert alert-success py-1 mb-2">
-              Dokumen <strong>Lengkap</strong> / <strong>Final</strong>. Semua kolom terkunci.
+          @if($isAdmin)
+            <div class="alert alert-primary py-1 mb-2">
+              <strong>Mode Admin:</strong> semua kolom dapat diedit.
             </div>
-          @elseif($lockExisting)
-            <div class="alert alert-info py-1 mb-2">
-              Riwayat proses sudah ada dan belum lengkap. <strong>Baris yang sudah ada terkunci</strong>,
-              namun Anda masih bisa <strong>menambah baris proses baru</strong>.
-            </div>
+          @else
+            @if($lockAll)
+              <div class="alert alert-success py-1 mb-2">
+                Dokumen <strong>Lengkap</strong> / <strong>Final</strong>. Semua kolom terkunci.
+              </div>
+            @elseif($lockExisting)
+              <div class="alert alert-info py-1 mb-2">
+                Riwayat proses sudah ada dan belum lengkap. <strong>Baris yang sudah ada terkunci</strong>,
+                namun Anda masih bisa <strong>menambah baris proses baru</strong>.
+              </div>
+            @endif
           @endif
 
           <form method="POST" action="{{ route('registrasi.update', $row->id) }}">
             @csrf
             @method('PUT')
 
-            {{-- Repeater: Tgl Submit + Tgl Terbit + Status + Keterangan + Aksi --}}
+            {{-- Repeater --}}
             <div class="border rounded p-1 mb-2">
               <div class="d-flex align-items-center justify-content-between mb-1">
                 <h6 class="mb-0">Proses Dokumen Registrasi</h6>
@@ -99,7 +115,7 @@
                     </div>
                   </div>
                 @empty
-                  {{-- Tidak ada riwayat → sediakan satu baris awal (aktif jika tidak lockAll) --}}
+                  {{-- Baris awal --}}
                   <div class="row g-1 align-items-end proses-row mb-1" data-index="0">
                     <div class="col-lg-3 col-md-3">
                       <input type="date" class="form-control" name="proses[0][tgl_submit]" value="" {{ $lockAll ? 'disabled' : '' }}>
@@ -182,7 +198,6 @@
   </div>
 </template>
 
-{{-- langsung inline agar pasti dieksekusi (tidak tergantung @stack) --}}
 <script>
 (function () {
   const wrap   = document.getElementById('prosesRows');
@@ -218,7 +233,7 @@
     bindRemove(node);
   });
 
-  bindRemove(); // initial
+  bindRemove();
 })();
 </script>
 @endif

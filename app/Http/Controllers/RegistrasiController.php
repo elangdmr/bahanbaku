@@ -8,19 +8,45 @@ use Illuminate\Support\Facades\Schema;
 
 class RegistrasiController extends Controller
 {
-    /** Tabel registrasi NIE */
     protected string $tblReg   = 'registrasi_nie';
-    /** Tabel trial */
     protected string $tblTrial = 'permintaan_bahan';
 
-    /* ============================================================
-     | Helpers
-     * ============================================================ */
+    /* ====================== Helpers ====================== */
 
-    /** Bentuk tampilan + flags kunci untuk Blade */
+    /** Deteksi apakah user saat ini Admin (toleran ke berbagai skema kolom) */
+   /** Deteksi apakah user saat ini Admin (aman untuk Intelephense) */
+private function isAdmin(): bool
+{
+    $u = auth()->user();
+    if (!$u) return false;
+
+    // Spatie/permission atau trait sejenis
+    if (is_callable([$u, 'hasRole'])) {
+        try { return (bool) call_user_func([$u, 'hasRole'], 'Admin'); } catch (\Throwable $e) {}
+    }
+    if (is_callable([$u, 'getRoleNames'])) {
+        try {
+            $roles = call_user_func([$u, 'getRoleNames']);
+            foreach ($roles as $r) {
+                if (strcasecmp((string)$r, 'Admin') === 0) return true;
+            }
+        } catch (\Throwable $e) {}
+    }
+
+    // Fallback: cek beberapa kemungkinan nama kolom role
+    foreach (['role','level','jabatan','tipe','type'] as $f) {
+        if (isset($u->$f) && is_string($u->$f) && strcasecmp($u->$f, 'Admin') === 0) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+    /** Format tampilan + flags kunci untuk Blade */
     private function decorate(object $r): object
     {
-        // kode PB-XX(.N)
+        // Kode PB-XX(.N)
         $base  = 'PB-' . str_pad((string)($r->bahan_id ?? 0), 2, '0', STR_PAD_LEFT);
         $ulang = (int)($r->ulang_ke ?? 0);
         $r->kode = $ulang > 0 ? "{$base}.{$ulang}" : $base;
@@ -29,20 +55,23 @@ class RegistrasiController extends Controller
         $val = property_exists($r, 'proses') ? $r->proses : null;
         $r->proses = is_array($val) ? $val : ($val ? (json_decode($val, true) ?: []) : []);
 
-        // status terakhir dari proses
-        $last = end($r->proses) ?: null;
+        // status label
+        $last       = end($r->proses) ?: null;
         $lastStatus = $last['status_dokumen'] ?? null;
-
-        // label status (untuk list kalau dipakai)
-        $label = $r->status_dokumen ?? $lastStatus ?? 'Registrasi';
+        $label      = $r->status_dokumen ?? $lastStatus ?? 'Registrasi';
         $r->status_label = $label;
 
-        // KUNCI:
-        // - final jika hasil sudah diisi, ATAU status dokumen Lengkap (top-level atau terakhir)
+        // default lock rules
         $r->lock_all      = !empty($r->hasil) || ($label === 'Dokumen Lengkap');
-        // Jika belum final & sudah punya riwayat → baris existing terkunci; boleh tambah baris baru
         $r->lock_existing = (!$r->lock_all && count($r->proses) > 0);
         $r->can_add_row   = !$r->lock_all;
+
+        // ==== Admin override: semuanya boleh edit ====
+        if ($this->isAdmin()) {
+            $r->lock_all      = false;
+            $r->lock_existing = false;
+            $r->can_add_row   = true;
+        }
 
         return $r;
     }
@@ -57,7 +86,7 @@ class RegistrasiController extends Controller
         return $out;
     }
 
-    /** Buang duplikasi baris proses (bandingkan nilai fieldnya) */
+    /** Buang duplikasi baris proses (untuk R&D saat baris lama terkunci) */
     private function filterNewRowsOnly(array $existing, array $incoming): array
     {
         $keep = [];
@@ -86,7 +115,7 @@ class RegistrasiController extends Controller
     /* ===================== INDEX ===================== */
     public function index()
     {
-        // Pending: hasil NULL
+        // Pending (hasil NULL)
         $pending = DB::table($this->tblReg.' as r')
             ->leftJoin($this->tblTrial.' as pb', 'pb.id', '=', 'r.trial_id')
             ->leftJoin('bahans as b', 'b.id', '=', 'pb.bahan_id')
@@ -102,7 +131,6 @@ class RegistrasiController extends Controller
             ->get()
             ->map(function ($r) {
                 $r = $this->decorate($r);
-                // badge kecil untuk tabel
                 $label = $r->status_label ?: 'Registrasi';
                 $r->status_badge = match ($label) {
                     'Dokumen Lengkap'        => 'bg-success',
@@ -114,7 +142,7 @@ class RegistrasiController extends Controller
                 return $r;
             });
 
-        // History: hasil NOT NULL
+        // History (hasil NOT NULL)
         $history = DB::table($this->tblReg.' as r')
             ->leftJoin($this->tblTrial.' as pb', 'pb.id', '=', 'r.trial_id')
             ->leftJoin('bahans as b', 'b.id', '=', 'pb.bahan_id')
@@ -152,23 +180,29 @@ class RegistrasiController extends Controller
             ->select('r.*','pb.ulang_ke','pb.bahan_id',DB::raw('b.nama as bahan_nama'))
             ->where('r.id', $id)
             ->first();
-        abort_if(!$row, 404); // <- perbaikan
+        abort_if(!$row, 404);
 
         $row = $this->decorate($row);
-        return view('registrasi.edit_registrasi', compact('row'));
+        $isAdmin = $this->isAdmin();
+
+        return view('registrasi.edit_registrasi', compact('row','isAdmin'));
     }
 
+    /* ===================== UPDATE ===================== */
     public function update(Request $req, $id)
     {
-        $current = DB::table($this->tblReg)->where('id', $id)->first();
-        abort_if(!$current, 404); // <- perbaikan
-        $cur = $this->decorate($current);
+        $isAdmin = $this->isAdmin();
 
-        if ($cur->lock_all) {
+        $current = DB::table($this->tblReg)->where('id', $id)->first();
+        abort_if(!$current, 404);
+        $cur = $this->decorate($current); // sudah mengandung flag admin
+
+        // R&D diblokir saat final; Admin boleh lanjut
+        if (!$isAdmin && $cur->lock_all) {
             return back()->withErrors(['form' => 'Dokumen sudah lengkap / final. Form terkunci.'])->withInput();
         }
 
-        // Ambil & bersihkan setiap baris proses
+        // Ambil & bersihkan input baris proses
         $rows  = $req->input('proses', []);
         $clean = [];
         foreach ($rows as $row) {
@@ -187,19 +221,26 @@ class RegistrasiController extends Controller
             }
         }
 
-        if ($cur->lock_existing) {
+        // Jika R&D dan baris existing terkunci → hanya boleh tambah yang benar2 baru
+        if (!$isAdmin && $cur->lock_existing) {
             $clean = $this->filterNewRowsOnly($cur->proses, $clean);
         }
 
-        $newProses = $cur->lock_existing
-            ? array_values(array_merge($cur->proses, $clean))
-            : (count($clean) ? array_values($clean) : $cur->proses);
+        // Susun proses baru
+        if ($isAdmin) {
+            // Admin boleh overwrite penuh jika ada input; jika tidak, jaga yang lama
+            $newProses = count($clean) ? array_values($clean) : $cur->proses;
+        } elseif ($cur->lock_existing) {
+            $newProses = array_values(array_merge($cur->proses, $clean));
+        } else {
+            $newProses = count($clean) ? array_values($clean) : $cur->proses;
+        }
 
         // status terakhir
-        $last = end($newProses) ?: null;
+        $last       = end($newProses) ?: null;
         $lastStatus = $last['status_dokumen'] ?? null;
 
-        // ambil TGL SUBMIT pertama & TGL TERBIT terakhir (jika ada)
+        // TGL SUBMIT pertama & TGL TERBIT terakhir
         $firstSubmit = null;
         $lastTerbit  = null;
         foreach ($newProses as $p) {
@@ -210,9 +251,9 @@ class RegistrasiController extends Controller
         $payload = [
             'proses'           => json_encode($newProses),
             'keterangan'       => $req->input('keterangan'),
-            'status_dokumen'   => $lastStatus,          // supaya tabel pending kelihatan
-            'tgl_nie_submit'   => $firstSubmit,         // fallback untuk kolom lama
-            'tgl_nie_terbit'   => $lastTerbit,          // fallback untuk kolom lama
+            'status_dokumen'   => $lastStatus,
+            'tgl_nie_submit'   => $firstSubmit,
+            'tgl_nie_terbit'   => $lastTerbit,
             'updated_at'       => now(),
         ];
         $payload = $this->onlyExisting($this->tblReg, $payload);
@@ -220,7 +261,9 @@ class RegistrasiController extends Controller
         DB::table($this->tblReg)->where('id', $id)->update($payload);
 
         $msg = 'Proses Registrasi disimpan.';
-        if ($lastStatus === 'Dokumen Lengkap') {
+        if ($lastStatus === 'Dokumen Lengkap' && !$isAdmin) {
+            // kalau R&D yang mem-finalkan, beri info terkunci;
+            // admin tetap bisa lanjut edit setelah final
             $msg = 'Dokumen Lengkap. Form terkunci.';
         }
 
@@ -231,7 +274,7 @@ class RegistrasiController extends Controller
     public function confirmForm($id)
     {
         $row = DB::table($this->tblReg)->where('id', $id)->first();
-        abort_if(!$row, 404); // <- perbaikan
+        abort_if(!$row, 404);
 
         return view('registrasi.confirm_registrasi', compact('row'));
     }

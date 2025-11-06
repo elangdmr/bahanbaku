@@ -42,13 +42,19 @@
                       <span class="badge rounded-pill {{ $r->status_badge }}">{{ $r->status_label }}</span>
                     </td>
                     <td class="text-end text-nowrap">
-                      {{-- Riwayat progres bahan di modul Halal --}}
-                     <a class="btn btn-outline-secondary btn-sm"
-   href="{{ route('riwayat.detail', ['type' => 'pb', 'id' => $r->id, 'modul' => 'ALL', 'origin' => 'Purchasing']) }}"
-   target="_blank" rel="noopener">Riwayat</a>
+                      {{-- Riwayat: tetap di tab ini + kirim origin & tab --}}
+                      <a class="btn btn-outline-secondary btn-sm"
+                         href="{{ route('riwayat.detail', [
+                           'type'       => 'pb',
+                           'id'         => $r->id,
+                           'modul'      => 'ALL',
+                           'origin'     => 'Halal',
+                           'origin_tab' => 'pending'
+                         ]) }}">
+                        Riwayat
+                      </a>
 
                       <a href="{{ route('halal.edit', $r->id) }}" class="btn btn-outline-primary btn-sm">Edit</a>
-                      {{-- tombol Konfirmasi dipindah ke halaman Edit --}}
                     </td>
                   </tr>
                 @empty
@@ -83,8 +89,15 @@
                     </td>
                     <td class="text-end text-nowrap">
                       <a class="btn btn-outline-secondary btn-sm"
-                         href="{{ route('riwayat.detail', ['type' => 'pb', 'id' => $r->id, 'modul' => 'Halal']) }}"
-                         target="_blank" rel="noopener">Riwayat</a>
+                         href="{{ route('riwayat.detail', [
+                           'type'       => 'pb',
+                           'id'         => $r->id,
+                           'modul'      => 'Halal',
+                           'origin'     => 'Halal',
+                           'origin_tab' => 'history'
+                         ]) }}">
+                        Riwayat
+                      </a>
                     </td>
                   </tr>
                 @empty

@@ -42,7 +42,10 @@ class PurchasingVendorController extends Controller
         $history = DB::table($this->tbl)
             ->leftJoin('bahans', 'bahans.id', '=', "{$this->tbl}.bahan_id")
             ->select("{$this->tbl}.*", 'bahans.nama as bahan_nama')
-            ->whereIn("{$this->tbl}.status", [self::STATUS_COA, self::STATUS_APPROVE, self::STATUS_REJECT])
+            // penting: normalisasi spasi
+            ->whereRaw("TRIM({$this->tbl}.status) IN (?, ?, ?)", [
+                self::STATUS_COA, self::STATUS_APPROVE, self::STATUS_REJECT
+            ])
             ->orderByDesc("{$this->tbl}.updated_at")
             ->get()
             ->map(fn ($r) => $this->decorate($this->hydrateVendorFields($r)));
@@ -80,11 +83,9 @@ class PurchasingVendorController extends Controller
         $r->validate([
             'pabrik_pembuat'     => ['nullable', 'string', 'max:255'],
             'negara_asal'        => ['nullable', 'string', 'max:255'],
-
             // repeater: distributor[]
             'distributor'        => ['array'],
             'distributor.*'      => ['nullable', 'string', 'max:255'],
-
             'tgl_permintaan_coa' => ['nullable', 'date'],
             'est_coa_diterima'   => ['nullable', 'date', 'after_or_equal:tgl_permintaan_coa'],
         ]);
@@ -108,7 +109,7 @@ class PurchasingVendorController extends Controller
         if (Schema::hasColumn($this->tbl, 'distributor_list')) {
             $payload['distributor_list'] = json_encode($distArr, JSON_UNESCAPED_UNICODE);
         }
-        // Tetap isi kolom lama "distributor" (string) agar kompatibel dengan list lama
+        // Tetap isi kolom lama "distributor" (string) agar kompatibel
         if (Schema::hasColumn($this->tbl, 'distributor')) {
             $payload['distributor'] = implode(', ', $distArr);
         }
@@ -136,61 +137,59 @@ class PurchasingVendorController extends Controller
         return view('purchasing_vendor.accept_purchasing-vendor', compact('row'));
     }
 
-   public function acceptUpdate(Request $r, $id)
-{
-    $r->validate([
-        'tgl_coa_diterima'   => ['required', 'date'],
+    public function acceptUpdate(Request $r, $id)
+    {
+        $r->validate([
+            'tgl_coa_diterima'   => ['required', 'date'],
+            // field vendor opsional (ikut tersimpan kalau diisi di form)
+            'pabrik_pembuat'     => ['nullable', 'string', 'max:255'],
+            'negara_asal'        => ['nullable', 'string', 'max:255'],
+            'tgl_permintaan_coa' => ['nullable', 'date'],
+            'est_coa_diterima'   => ['nullable', 'date'],
+            // repeater distributor[]
+            'distributor'        => ['array'],
+            'distributor.*'      => ['nullable', 'string', 'max:255'],
+        ]);
 
-        // field vendor opsional (ikut tersimpan kalau diisi di form)
-        'pabrik_pembuat'     => ['nullable', 'string', 'max:255'],
-        'negara_asal'        => ['nullable', 'string', 'max:255'],
-        'tgl_permintaan_coa' => ['nullable', 'date'],
-        'est_coa_diterima'   => ['nullable', 'date'],
+        $current = DB::table($this->tbl)->where('id', $id)->first();
+        abort_if(!$current, 404);
 
-        // repeater distributor[]
-        'distributor'        => ['array'],
-        'distributor.*'      => ['nullable', 'string', 'max:255'],
-    ]);
+        // Normalisasi distributor dari form (kalau ada)
+        $list = collect($r->input('distributor', []))
+            ->map(fn ($v) => trim((string) $v))
+            ->filter()
+            ->values()
+            ->all();
 
-$current = DB::table($this->tbl)->where('id', $id)->first();
-abort_if(!$current, 404);
+        $payload = [
+            'pabrik_pembuat'     => $r->pabrik_pembuat,
+            'negara_asal'        => $r->negara_asal,
+            'tgl_permintaan_coa' => $r->tgl_permintaan_coa,
+            'est_coa_diterima'   => $r->est_coa_diterima,
+            'tgl_coa_diterima'   => $r->tgl_coa_diterima,
+            'status'             => self::STATUS_COA,   // lanjut ke modul Uji COA
+            'updated_at'         => now(),
+        ];
 
-    // Normalisasi distributor dari form (kalau ada)
-    $list = collect($r->input('distributor', []))
-        ->map(fn ($v) => trim((string) $v))
-        ->filter()
-        ->values()
-        ->all();
-
-    $payload = [
-        'pabrik_pembuat'     => $r->pabrik_pembuat,
-        'negara_asal'        => $r->negara_asal,
-        'tgl_permintaan_coa' => $r->tgl_permintaan_coa,
-        'est_coa_diterima'   => $r->est_coa_diterima,
-        'tgl_coa_diterima'   => $r->tgl_coa_diterima,
-        'status'             => self::STATUS_COA,   // lanjut ke modul Uji COA
-        'updated_at'         => now(),
-    ];
-
-    // Hanya ubah data distributor bila user memang kirim isian distributor[]
-    if (count($list) > 0) {
-        if (Schema::hasColumn($this->tbl, 'distributor_list')) {
-            $payload['distributor_list'] = json_encode($list);
+        // Hanya ubah data distributor bila user memang kirim isian distributor[]
+        if (count($list) > 0) {
+            if (Schema::hasColumn($this->tbl, 'distributor_list')) {
+                $payload['distributor_list'] = json_encode($list);
+            }
+            if (Schema::hasColumn($this->tbl, 'distributor')) {
+                // simpan SEMUA distributor dalam kolom string (dipisah koma)
+                $payload['distributor'] = implode(', ', $list);
+            }
         }
-        if (Schema::hasColumn($this->tbl, 'distributor')) {
-            // simpan SEMUA distributor dalam kolom string (dipisah koma) untuk kompatibilitas
-            $payload['distributor'] = implode(', ', $list);
-        }
+
+        $payload = $this->onlyExistingColumns($payload);
+
+        DB::table($this->tbl)->where('id', $id)->update($payload);
+
+        return redirect()
+            ->route('uji-coa.index')
+            ->with('success', 'Accept berhasil. Data vendor tersimpan & diarahkan ke Hasil Uji COA.');
     }
-
-    $payload = $this->onlyExistingColumns($payload);
-
-    DB::table($this->tbl)->where('id', $id)->update($payload);
-
-    return redirect()
-        ->route('uji-coa.index')
-        ->with('success', 'Accept berhasil. Data vendor tersimpan & diarahkan ke Hasil Uji COA.');
-}
 
     private function decorate(object $r): object
     {
@@ -198,8 +197,8 @@ abort_if(!$current, 404);
         $ulangKe = (int)($r->ulang_ke ?? 0);
         $r->kode = $ulangKe > 0 ? "{$base}.{$ulangKe}" : $base;
 
-        $r->status_label = $r->status ?? '-';
-        $r->status_badge = match ($r->status) {
+        $r->status_label = trim($r->status ?? '-');
+        $r->status_badge = match ($r->status_label) {
             self::STATUS_APPROVE => 'badge-light-success',
             self::STATUS_REJECT  => 'badge-light-danger',
             self::STATUS_COA     => 'badge-light-primary',

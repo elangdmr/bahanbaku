@@ -1,38 +1,21 @@
 @php
-    $user    = auth()->user();
-    $avatar  = strtoupper(substr($user->name ?? 'U', 0, 2));
-    $role    = strtolower($user->role ?? '');
-    $isAdmin = in_array($role, ['admin','administrator','superadmin'], true);
-    $isPPIC  = ($role === 'ppic');
-    $isPurch = ($role === 'purchasing');
-    $isRND   = ($role === 'r&d' || $role === 'rnd');
+  $user    = auth()->user();
+  $avatar  = strtoupper(substr($user->name ?? 'U', 0, 2));
+  $role    = strtolower($user->role ?? '');
+  $isAdmin = in_array($role, ['admin','administrator','superadmin'], true);
+  $isPPIC  = ($role === 'ppic');
+  $isPurch = ($role === 'purchasing');
+  $isRND   = ($role === 'r&d' || $role === 'rnd');
 
-    // Brand click tujuan
-    $brandHome = route('dashboard');
-    if ($isPPIC)  $brandHome = route('halal.index');
-    if ($isPurch) $brandHome = route('purch-vendor.index');
-    // Opsional: jika ingin R&D diarahkan ke modulnya
-    // if ($isRND)  $brandHome = route('trial-rnd.index');
+  // Brand click tujuan
+  $brandHome = route('dashboard');
+  if ($isPPIC)  $brandHome = route('halal.index');
+  if ($isPurch) $brandHome = route('purch-vendor.index');
+  // if ($isRND)  $brandHome = route('trial-rnd.index'); // opsional
 @endphp
 
 <!DOCTYPE html>
 <html class="loading" lang="en" data-textdirection="ltr">
-<style>
-  .main-menu .navigation > li.active > a,
-  .main-menu .navigation > li > a:hover,
-  .main-menu .navigation > li.open > a{
-    background: linear-gradient(118deg,#dc3545,rgba(220,53,69,.7)) !important;
-    box-shadow: 0 0 10px 1px rgba(220,53,69,.5) !important;
-    color:#fff !important;
-  }
-  .main-menu .navigation > li.active > a i,
-  .main-menu .navigation > li > a:hover i,
-  .main-menu .navigation > li.open > a i{ color:#fff !important; }
-  .main-menu .navigation .menu-content > li.active > a{ color:#dc3545 !important; }
-  .main-menu .navigation .menu-content > li.active > a:before{ background:#dc3545 !important; }
-  .navbar-header .brand-text, .main-menu .brand-text { color:#dc3545 !important; }
-</style>
-
 <head>
   <meta charset="UTF-8" />
   <meta http-equiv="X-UA-Compatible" content="IE=edge" />
@@ -74,6 +57,24 @@
 
   {{-- Custom --}}
   <link rel="stylesheet" href="{{ asset('assets/css/style.css') }}">
+
+  @stack('styles')
+
+  <style>
+    .main-menu .navigation > li.active > a,
+    .main-menu .navigation > li > a:hover,
+    .main-menu .navigation > li.open > a{
+      background: linear-gradient(118deg,#dc3545,rgba(220,53,69,.7)) !important;
+      box-shadow: 0 0 10px 1px rgba(220,53,69,.5) !important;
+      color:#fff !important;
+    }
+    .main-menu .navigation > li.active > a i,
+    .main-menu .navigation > li > a:hover i,
+    .main-menu .navigation > li.open > a i{ color:#fff !important; }
+    .main-menu .navigation .menu-content > li.active > a{ color:#dc3545 !important; }
+    .main-menu .navigation .menu-content > li.active > a:before{ background:#dc3545 !important; }
+    .navbar-header .brand-text, .main-menu .brand-text { color:#dc3545 !important; }
+  </style>
 </head>
 
 <body class="vertical-layout vertical-menu-modern navbar-floating footer-static" data-open="click" data-menu="vertical-menu-modern">
@@ -82,7 +83,9 @@
     <div class="navbar-container d-flex content">
       <div class="bookmark-wrapper d-flex align-items-center">
         <ul class="nav navbar-nav d-xl-none">
-          <li class="nav-item"><a class="nav-link menu-toggle" href="#"><i class="ficon" data-feather="menu"></i></a></li>
+          <li class="nav-item">
+            <a class="nav-link menu-toggle" href="#"><i class="ficon" data-feather="menu"></i></a>
+          </li>
         </ul>
         <ul class="nav navbar-nav bookmark-icons">
           @if($isAdmin)
@@ -94,6 +97,7 @@
           @endif
         </ul>
       </div>
+
       <ul class="nav navbar-nav align-items-center ms-auto">
         <li class="nav-item dropdown dropdown-user">
           <a class="nav-link dropdown-toggle dropdown-user-link" id="dropdown-user" href="#" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
@@ -132,7 +136,7 @@
     <div class="main-menu-content">
       <ul class="navigation navigation-main" id="main-menu-navigation" data-menu="menu-navigation">
 
-        {{-- DASHBOARD: selalu ada untuk semua role --}}
+        {{-- DASHBOARD --}}
         <li class="nav-item {{ request()->routeIs('dashboard') ? 'active' : '' }}">
           <a class="d-flex align-items-center" href="{{ route('dashboard') }}">
             <i data-feather="home"></i><span class="menu-title text-truncate">Dashboard</span>
@@ -143,7 +147,9 @@
         @if ($isAdmin)
           <li class="navigation-header"><span>User Management</span><i data-feather="more-horizontal"></i></li>
           <li class="nav-item">
-            <a class="d-flex align-items-center" href="#"><i data-feather="user"></i><span class="menu-title text-truncate">User</span></a>
+            <a class="d-flex align-items-center" href="#">
+              <i data-feather="user"></i><span class="menu-title text-truncate">User</span>
+            </a>
             <ul class="menu-content">
               <li class="{{ request()->is('show-rnd*') ? 'active' : '' }}">
                 <a class="d-flex align-items-center" href="{{ route('show-rnd') }}"><i data-feather="circle"></i><span class="menu-item text-truncate">R&amp;D</span></a>
@@ -158,32 +164,56 @@
           </li>
 
           <li class="navigation-header"><span>Master Data</span><i data-feather="more-horizontal"></i></li>
+
           <li class="nav-item {{ request()->routeIs('bahan.*') ? 'active' : '' }}">
             <a class="d-flex align-items-center" href="{{ route('bahan.index') }}">
               <i data-feather="box"></i><span class="menu-title text-truncate">Bahan Baku</span>
             </a>
           </li>
 
+          {{-- MASTER PRODUK --}}
+          <li class="nav-item {{ request()->routeIs('produk.*') ? 'active' : '' }}">
+            <a class="d-flex align-items-center" href="{{ route('produk.index') }}">
+              <i data-feather="package"></i><span class="menu-title text-truncate">Master Produk</span>
+            </a>
+          </li>
+
           <li class="nav-item {{ request()->routeIs('show-permintaan') ? 'active' : '' }}">
-            <a class="d-flex align-items-center" href="{{ route('show-permintaan') }}"><i data-feather="file-text"></i><span class="menu-title text-truncate">Permintaan Bahan Baku</span></a>
+            <a class="d-flex align-items-center" href="{{ route('show-permintaan') }}">
+              <i data-feather="file-text"></i><span class="menu-title text-truncate">Permintaan Bahan Baku</span>
+            </a>
           </li>
           <li class="nav-item {{ request()->routeIs('purch-vendor.*') ? 'active' : '' }}">
-            <a class="d-flex align-items-center" href="{{ route('purch-vendor.index') }}"><i data-feather="shopping-cart"></i><span class="menu-title text-truncate">Purchasing Vendor</span></a>
+            <a class="d-flex align-items-center" href="{{ route('purch-vendor.index') }}">
+              <i data-feather="shopping-cart"></i><span class="menu-title text-truncate">Purchasing Vendor</span>
+            </a>
           </li>
           <li class="nav-item {{ request()->routeIs('uji-coa.*') ? 'active' : '' }}">
-            <a class="d-flex align-items-center" href="{{ route('uji-coa.index') }}"><i data-feather="check-square"></i><span class="menu-title text-truncate">Hasil Uji COA</span></a>
+            <a class="d-flex align-items-center" href="{{ route('uji-coa.index') }}">
+              <i data-feather="check-square"></i><span class="menu-title text-truncate">Hasil Uji COA</span>
+            </a>
           </li>
           <li class="nav-item {{ request()->routeIs('halal.*') ? 'active' : '' }}">
-            <a class="d-flex align-items-center" href="{{ route('halal.index') }}"><i data-feather="award"></i><span class="menu-title text-truncate">Halal PPIC</span></a>
+            <a class="d-flex align-items-center" href="{{ route('halal.index') }}">
+              <i data-feather="award"></i><span class="menu-title text-truncate">Halal PPIC</span>
+            </a>
           </li>
           <li class="nav-item {{ request()->routeIs('sampling-pch.*') ? 'active' : '' }}">
-            <a class="d-flex align-items-center" href="{{ route('sampling-pch.index') }}"><i data-feather="droplet"></i><span class="menu-title text-truncate">Sampling PCH</span></a>
+            <a class="d-flex align-items-center" href="{{ route('sampling-pch.index') }}">
+              <i data-feather="droplet"></i><span class="menu-title text-truncate">Sampling PCH</span>
+            </a>
           </li>
           <li class="nav-item {{ request()->routeIs('trial-rnd.*') ? 'active' : '' }}">
-            <a class="d-flex align-items-center" href="{{ route('trial-rnd.index') }}"><i data-feather="cpu"></i><span class="menu-title text-truncate">Trial R&amp;D</span></a>
+            <a class="d-flex align-items-center" href="{{ route('trial-rnd.index') }}">
+              <i data-feather="cpu"></i><span class="menu-title text-truncate">Trial R&amp;D</span>
+            </a>
           </li>
-          <li class="nav-item {{ request()->routeIs('registrasi.*') ? 'active' : '' }}">
-            <a class="d-flex align-items-center" href="{{ route('registrasi.index') }}"><i data-feather="grid"></i><span class="menu-title text-truncate">Registrasi</span></a>
+
+          {{-- Registrasi: EXCLUDE metrik dari active --}}
+          <li class="nav-item {{ (request()->routeIs('registrasi.*') && !request()->routeIs('registrasi.metrik*')) ? 'active' : '' }}">
+            <a class="d-flex align-items-center" href="{{ route('registrasi.index') }}">
+              <i data-feather="grid"></i><span class="menu-title text-truncate">Registrasi</span>
+            </a>
           </li>
         @endif
 
@@ -199,10 +229,14 @@
         {{-- ===================== MENU PURCHASING ===================== --}}
         @if ($isPurch)
           <li class="nav-item {{ request()->routeIs('purch-vendor.*') ? 'active' : '' }}">
-            <a class="d-flex align-items-center" href="{{ route('purch-vendor.index') }}"><i data-feather="shopping-cart"></i><span class="menu-title text-truncate">Purchasing Vendor</span></a>
+            <a class="d-flex align-items-center" href="{{ route('purch-vendor.index') }}">
+              <i data-feather="shopping-cart"></i><span class="menu-title text-truncate">Purchasing Vendor</span>
+            </a>
           </li>
           <li class="nav-item {{ request()->routeIs('sampling-pch.*') ? 'active' : '' }}">
-            <a class="d-flex align-items-center" href="{{ route('sampling-pch.index') }}"><i data-feather="droplet"></i><span class="menu-title text-truncate">Sampling PCH</span></a>
+            <a class="d-flex align-items-center" href="{{ route('sampling-pch.index') }}">
+              <i data-feather="droplet"></i><span class="menu-title text-truncate">Sampling PCH</span>
+            </a>
           </li>
         @endif
 
@@ -223,14 +257,25 @@
               <i data-feather="cpu"></i><span class="menu-title text-truncate">Trial R&amp;D</span>
             </a>
           </li>
-          <li class="nav-item {{ request()->routeIs('registrasi.*') ? 'active' : '' }}">
+
+          {{-- Registrasi: EXCLUDE metrik dari active --}}
+          <li class="nav-item {{ (request()->routeIs('registrasi.*') && !request()->routeIs('registrasi.metrik*')) ? 'active' : '' }}">
             <a class="d-flex align-items-center" href="{{ route('registrasi.index') }}">
               <i data-feather="grid"></i><span class="menu-title text-truncate">Registrasi</span>
             </a>
           </li>
         @endif
 
-        {{-- RIWAYAT: tampil untuk semua role --}}
+        {{-- ===================== METRIK REGISTRASI ===================== --}}
+        @if (($isAdmin || $isRND) && Route::has('registrasi.metrik'))
+          <li class="nav-item {{ request()->routeIs('registrasi.metrik*') ? 'active' : '' }}">
+            <a class="d-flex align-items-center" href="{{ route('registrasi.metrik') }}">
+              <i data-feather="bar-chart-2"></i><span class="menu-title text-truncate">Metrik Registrasi</span>
+            </a>
+          </li>
+        @endif
+
+        {{-- RIWAYAT: untuk semua role --}}
         <li class="nav-item {{ request()->routeIs('riwayat.*') ? 'active' : '' }}">
           <a class="d-flex align-items-center" href="{{ route('riwayat.index') }}">
             <i data-feather="activity"></i><span class="menu-title text-truncate">Riwayat Proses</span>
@@ -256,11 +301,15 @@
 
   {{-- Vendor JS --}}
   <script src="{{ asset('app-assets/vendors/js/vendors.min.js') }}"></script>
+
+  {{-- DataTables --}}
   <script src="{{ asset('app-assets/vendors/js/tables/datatable/jquery.dataTables.min.js') }}"></script>
   <script src="{{ asset('app-assets/vendors/js/tables/datatable/dataTables.bootstrap5.min.js') }}"></script>
   <script src="{{ asset('app-assets/vendors/js/tables/datatable/dataTables.responsive.min.js') }}"></script>
   <script src="{{ asset('app-assets/vendors/js/tables/datatable/responsive.bootstrap4.js') }}"></script>
   <script src="{{ asset('app-assets/vendors/js/tables/datatable/datatables.buttons.min.js') }}"></script>
+
+  {{-- Forms/Charts/Pickers --}}
   <script src="{{ asset('app-assets/vendors/js/forms/validation/jquery.validate.min.js') }}"></script>
   <script src="{{ asset('app-assets/vendors/js/charts/apexcharts.min.js') }}"></script>
   <script src="{{ asset('app-assets/vendors/js/forms/select/select2.full.min.js') }}"></script>
@@ -282,9 +331,22 @@
   <script src="{{ asset('app-assets/js/scripts/pages/app-user-list.min.js') }}"></script>
   <script src="{{ asset('app-assets/js/scripts/tables/table-datatables-advanced.min.js') }}"></script>
   <script src="{{ asset('app-assets/js/scripts/forms/pickers/form-pickers.min.js') }}"></script>
+  <script src="{{ asset('app-assets/vendors/js/extensions/toastr.min.js') }}"></script>
+
+  @stack('scripts')
 
   <script>
-    $(window).on('load', function(){ if (feather) feather.replace({ width:14, height:14 }); });
+    $(window).on('load', function(){
+      if (feather) feather.replace({ width:14, height:14 });
+
+      // Flash success/error via Toastr (opsional)
+      @if(session('success'))
+        toastr.success(@json(session('success')));
+      @endif
+      @if(session('error'))
+        toastr.error(@json(session('error')));
+      @endif
+    });
   </script>
 </body>
 </html>
