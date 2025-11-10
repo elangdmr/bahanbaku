@@ -109,11 +109,11 @@
                 <td class="text-end text-nowrap">
                   <a class="btn btn-outline-secondary btn-sm me-50"
                      href="{{ route('riwayat.detail', [
-                       'type'  => $r->pb_id ? 'pb' : 'reg',
-                       'id'    => $r->pb_id ?: $r->id,
-                       'modul' => 'Registrasi'
-                     ]) }}"
-                     target="_blank" rel="noopener">Riwayat</a>
+                       'type'   => $r->pb_id ? 'pb' : 'reg',
+                       'id'     => $r->pb_id ?: $r->id,
+                       'modul'  => 'Registrasi',
+                       'origin' => 'metrik-registrasi'
+                     ]) }}">Riwayat</a>
                   <a href="{{ route('registrasi.metrik.edit', $r->id) }}" class="btn btn-outline-primary btn-sm">Edit</a>
                 </td>
               </tr>

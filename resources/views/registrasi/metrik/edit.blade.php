@@ -19,7 +19,6 @@
           </div>
 
           @php
-            // Kelayakan konfirmasi: selesai/disetujui/tgl NIE ada/masa berlaku ada
             $isSelesai   = trim((string)($row->on_process_bpom ?? '')) === 'Selesai';
             $isApprove   = trim((string)($row->hasil ?? '')) === 'Disetujui';
             $hasNIE      = !empty($row->tgl_nie_terbit ?? null);
@@ -38,8 +37,9 @@
                href="{{ route('riwayat.detail', [
                   'type'  => !empty($row->pb_id ?? null) ? 'pb' : 'reg',
                   'id'    => !empty($row->pb_id ?? null) ? $row->pb_id : $row->id,
-                  'modul' => 'Registrasi'
-               ]) }}" target="_blank" rel="noopener">
+                  'modul' => 'Registrasi',
+                  'origin'=> 'metrik-registrasi'
+               ]) }}">
                <i data-feather="activity"></i><span class="ms-50">Riwayat</span>
             </a>
 
@@ -153,7 +153,6 @@ document.addEventListener('DOMContentLoaded', function () {
   if (window.flatpickr) {
     flatpickr('#masa_berlaku_nie', { dateFormat: 'Y-m-d', allowInput: true });
   }
-  // Tooltip bootstrap
   const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
   tooltipTriggerList.forEach(function (tooltipTriggerEl) {
     new bootstrap.Tooltip(tooltipTriggerEl);

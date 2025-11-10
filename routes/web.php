@@ -74,6 +74,11 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/riwayat/{kode}/show', [RiwayatController::class, 'show'])->name('riwayat.show');
     Route::get('/riwayat/{type}/{id}/detail', [RiwayatController::class, 'detail'])->name('riwayat.detail');
 
+    // === Export CSV: semua data atau sesuai filter
+    // scope=all (default)  -> semua data
+    // scope=filtered       -> sesuai query string (q, modul, from, to)
+    Route::get('/riwayat/export.csv', [RiwayatController::class, 'export'])->name('riwayat.export');
+
     /* ======================= ADMIN + R&D (modul kerja) ======================= */
     Route::middleware('role:Admin,R&D')->group(function () {
 

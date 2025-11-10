@@ -122,12 +122,24 @@ class TrialRndController extends Controller
         return $r;
     }
 
-    /** Simpan hanya kolom yang memang ada di tabel */
+    /** Simpan hanya kolom yang memang ada di tabel utama ($this->tbl) */
     private function onlyExisting(array $data): array
     {
         $out = [];
         foreach ($data as $k => $v) {
             if (Schema::hasColumn($this->tbl, $k)) {
+                $out[$k] = $v;
+            }
+        }
+        return $out;
+    }
+
+    /** Simpan hanya kolom yang memang ada di tabel tertentu */
+    private function onlyExistingIn(string $table, array $data): array
+    {
+        $out = [];
+        foreach ($data as $k => $v) {
+            if (Schema::hasColumn($table, $k)) {
                 $out[$k] = $v;
             }
         }
@@ -183,8 +195,7 @@ class TrialRndController extends Controller
             ->where("{$this->tbl}.id", $id)
             ->first();
 
-     abort_if(!$row, 404);
-
+        abort_if(!$row, 404);
 
         $row = $this->decorate($row);
         return view('trial_rnd.edit_trial', compact('row'));
@@ -198,7 +209,7 @@ class TrialRndController extends Controller
         }
 
         $current = DB::table($this->tbl)->where('id', $id)->first();
-  abort_if(!$current, 404);
+        abort_if(!$current, 404);
         $cur = $this->decorate($current);
 
         // Blokir hanya untuk non-admin saat final
@@ -375,7 +386,7 @@ class TrialRndController extends Controller
         $now = now();
 
         $current = DB::table($this->tbl)->where('id', $id)->first();
-      abort_if(!$current, 404);
+        abort_if(!$current, 404);
         $cur = $this->decorate($current);
 
         $ok = $r->hasil_trial === 'Lulus Trial Keseluruhan';
@@ -438,22 +449,34 @@ class TrialRndController extends Controller
         }
 
         if ($ok) {
-            // Bootstrap entry registrasi (opsional)
+            // Bootstrap entry registrasi (aman terhadap skema yang berubah)
             $tblReg = 'registrasi_nie';
-            $exists = DB::table($tblReg)->where('trial_id', $id)->first();
+
+            // Cek existing berdasarkan trial_id jika kolomnya ada
+            $exists = Schema::hasColumn($tblReg, 'trial_id')
+                ? DB::table($tblReg)->where('trial_id', $id)->first()
+                : null;
+
+            // siapkan kandidat payload; hanya kolom yang ada akan dipakai
             $payload = [
                 'trial_id'          => $id,
-                'kode'              => $cur->kode,
-                'bahan_nama'        => $cur->bahan_nama ?? null,
+                'kode'              => $cur->kode,                 // akan diabaikan jika kolom 'kode' tak ada
+                'bahan_nama'        => $cur->bahan_nama ?? null,   // alias 1
+                'nama_bahan'        => $cur->bahan_nama ?? null,   // alias 2 (jaga-jaga)
                 'tgl_trial_selesai' => $r->tgl_selesai_trial,
                 'status_dokumen'    => 'Registrasi',
-                'updated_at'        => now(),
+                'updated_at'        => $now,
             ];
+            $payload = $this->onlyExistingIn($tblReg, $payload);
+
             if ($exists) {
                 DB::table($tblReg)->where('id', $exists->id)->update($payload);
             } else {
-                $payload['created_at'] = now();
-                DB::table($tblReg)->insert($payload);
+                $insert = $payload;
+                if (Schema::hasColumn($tblReg, 'created_at')) {
+                    $insert['created_at'] = $now;
+                }
+                DB::table($tblReg)->insert($insert);
             }
 
             return redirect()->route('registrasi.index')

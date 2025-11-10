@@ -54,6 +54,19 @@ class MetrikRegistrasiController extends Controller
         return null;
     }
 
+    /**
+     * COALESCE lintas tabel: ambil dari registrasi_nie (r.*) dulu, lalu fallback ke permintaan_bahan (pb.*).
+     * Menghasilkan DB::raw("COALESCE(...) AS `alias`") atau "NULL AS `alias`" bila tak ada satupun kolomnya.
+     */
+    private function coalesceRegPb(string $alias, array $regCols, array $pbCols)
+    {
+        $parts = [];
+        foreach ($regCols as $c) if (Schema::hasColumn($this->tblReg, $c)) $parts[] = 'r.`'.$c.'`';
+        foreach ($pbCols  as $c) if (Schema::hasColumn($this->tblPB,  $c)) $parts[] = 'pb.`'.$c.'`';
+        $sql = count($parts) ? ('COALESCE('.implode(',', $parts).') AS `'.$alias.'`') : ('NULL AS `'.$alias.'`');
+        return DB::raw($sql);
+    }
+
     /* =============== Sinkron bahan TERBIT -> produk_bahan =============== */
     private function syncProdukKomposisiTerbit(): void
     {
@@ -380,13 +393,22 @@ class MetrikRegistrasiController extends Controller
     /* ===================== KONFIRMASI TUJUAN PRODUK ===================== */
     public function confirmForm(int $id)
     {
+        // Ambil NIE terbit/hasil dengan coalesce dinamis
+        $exprTerbit = $this->coalesceRegPb('tgl_nie_terbit',
+            ['tgl_nie_terbit','tgl_terbit_nie','tanggal_terbit_nie'],
+            ['nie_tgl_terbit']
+        );
+        $exprHasil = $this->coalesceRegPb('hasil', ['hasil'], ['nie_hasil']);
+
         $row = DB::table($this->tblReg.' as r')
             ->leftJoin($this->tblPB.' as pb', 'pb.id', '=', 'r.trial_id')
             ->leftJoin('bahans as b', 'b.id', '=', 'pb.bahan_id')
             ->select(
-                'r.id','r.hasil','r.tgl_nie_terbit','r.proses','r.keterangan',
+                'r.id','r.proses','r.keterangan',
                 'pb.id as pb_id','pb.bahan_id','pb.ulang_ke','pb.produk_id as pb_produk_id',
-                DB::raw('b.nama as bahan_nama')
+                DB::raw('b.nama as bahan_nama'),
+                $exprTerbit,   // alias => tgl_nie_terbit
+                $exprHasil     // alias => hasil
             )
             ->where('r.id', $id)->first();
 
@@ -418,6 +440,12 @@ class MetrikRegistrasiController extends Controller
             }
         }
 
+        // opsi peran (suggestion; tetap input bebas)
+        $peranOptions = [
+            'API','Eksipien','Pengikat','Pelicin','Pengisi','Disintegran',
+            'Pelarut','Pewarna','Perisa','Pengawet'
+        ];
+
         return view('registrasi.metrik.confirm', [
             'row'            => $row,
             'kode'           => $kode,
@@ -425,6 +453,7 @@ class MetrikRegistrasiController extends Controller
             'produkList'     => $produkList,
             'komposisiBahan' => $komposisiBahan,
             'boleh'          => $boleh,
+            'peranOptions'   => $peranOptions,
         ]);
     }
 
@@ -432,6 +461,7 @@ class MetrikRegistrasiController extends Controller
     {
         $r->validate([
             'produk_id' => 'required|integer|exists:produks,id',
+            'peran'     => 'nullable|string|max:50',
         ]);
 
         $reg = DB::table($this->tblReg)->where('id',$id)->first();
@@ -442,7 +472,9 @@ class MetrikRegistrasiController extends Controller
 
         $produkId = (int)$r->produk_id;
         $bahanId  = (int)$pb->bahan_id;
+        $peran    = trim((string)$r->peran) ?: null;
 
+        // tempel produk_id ke PB
         DB::table($this->tblPB)->where('id', $pb->id)->update([
             'produk_id'  => $produkId,
             'updated_at' => now(),
@@ -451,14 +483,20 @@ class MetrikRegistrasiController extends Controller
         $exists = DB::table('produk_bahan')
             ->where('produk_id',$produkId)->where('bahan_id',$bahanId)->first();
 
-        if (!$exists) {
+        if ($exists) {
+            if ($peran !== null) {
+                DB::table('produk_bahan')
+                    ->where('id', $exists->id)
+                    ->update(['peran' => $peran, 'updated_at' => now()]);
+            }
+        } else {
             $nextOrder = (int)(DB::table('produk_bahan')->where('produk_id',$produkId)->max('urutan') ?? 0) + 1;
             DB::table('produk_bahan')->insert([
                 'produk_id'  => $produkId,
                 'bahan_id'   => $bahanId,
                 'qty'        => null,
                 'satuan'     => null,
-                'peran'      => null,
+                'peran'      => $peran,
                 'urutan'     => $nextOrder,
                 'created_at' => now(),
                 'updated_at' => now(),
@@ -466,7 +504,7 @@ class MetrikRegistrasiController extends Controller
         }
 
         return redirect()->route('registrasi.metrik.edit', $id)
-            ->with('success', 'Bahan berhasil diarahkan ke produk. Silakan lengkapi peran/qty/satuan bila perlu.');
+            ->with('success', 'Bahan berhasil diarahkan ke produk. Peran sudah disimpan.');
     }
 
     /* ================= Komposisi (opsional, bila dipakai) ================ */
