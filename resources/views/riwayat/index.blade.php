@@ -103,7 +103,7 @@
 
               {{-- kanan: tombol --}}
               <div class="d-flex align-items-center gap-1">
-                <button class="btn btn-primary d-flex align-items-center">
+                <button class="btn btn-primary d-flex align-items-center" type="submit">
                   <i data-feather="filter"></i><span class="ms-50">Filter</span>
                 </button>
                 <a href="{{ route('riwayat.index') }}" class="btn btn-outline-secondary d-flex align-items-center">
@@ -138,47 +138,85 @@
         {{-- ========= Tabel ========= --}}
         <div class="card-body">
           <div class="table-responsive">
-            <table class="table table-hover">
+            <table class="table table-hover align-middle">
               <thead>
                 <tr>
                   <th style="width:135px">Tanggal</th>
-                  <th style="width:105px">ID</th>
+                  <th style="width:110px">ID</th>
                   <th>Nama Bahan</th>
-                  <th style="width:140px">Diproses di</th>
+                  <th style="width:150px">Diproses di</th>
                   <th>Peristiwa</th>
-                  <th style="width:180px">Status</th>
+                  <th style="width:200px">Status</th>
                   <th>Keterangan</th>
-                  <th style="width:90px" class="text-end">Aksi</th>
+                  <th style="width:100px" class="text-end">Aksi</th>
                 </tr>
               </thead>
               <tbody>
               @forelse($events as $e)
+                @php
+                  $tanggal = !empty($e['tanggal']) ? \Carbon\Carbon::parse($e['tanggal'])->format('d/m/Y') : '-';
+                  $st = (string)($e['status'] ?? '');
+                  $badge = 'bg-light-secondary';
+                  if (preg_match('/(Lengkap|Approved|Lulus|Diterima)/i', $st)) $badge='bg-success';
+                  elseif (preg_match('/(Belum|Menunggu|Estimasi)/i', $st)) $badge='bg-warning text-dark';
+                  elseif (preg_match('/(Tidak|Rejected|Ditolak|Gagal)/i', $st)) $badge='bg-danger';
+                  elseif (preg_match('/(Diproses|Proses)/i', $st)) $badge='bg-info';
+
+                  $hasModFilter = request()->filled('modul');
+                  $urlAll   = $e['link']        ?? null;       // ALL
+                  $urlMod   = $e['link_modul']  ?? $urlAll;    // fallback ALL bila null
+                @endphp
                 <tr>
-                  <td>{{ \Carbon\Carbon::parse($e['tanggal'])->format('d/m/Y') }}</td>
-                  <td><span class="badge rounded-pill bg-secondary">{{ $e['kode'] }}</span></td>
+                  <td>{{ $tanggal }}</td>
+                  <td>
+                    <span class="badge rounded-pill bg-secondary" title="Kode Permintaan">
+                      {{ $e['kode'] }}
+                    </span>
+                  </td>
                   <td>{{ $e['bahan'] }}</td>
                   <td>{{ $e['modul'] }}</td>
                   <td>{{ $e['peristiwa'] }}</td>
                   <td>
-                    @php
-                      $st = (string)($e['status'] ?? '');
-                      $badge = 'bg-light-secondary';
-                      if (preg_match('/(Lengkap|Approved|Lulus|Diterima)/i', $st)) $badge='bg-success';
-                      elseif (preg_match('/(Belum|Menunggu|Estimasi)/i', $st)) $badge='bg-warning text-dark';
-                      elseif (preg_match('/(Tidak|Rejected|Ditolak|Gagal)/i', $st)) $badge='bg-danger';
-                      elseif (preg_match('/(Diproses|Proses)/i', $st)) $badge='bg-info';
-                    @endphp
                     <span class="badge {{ $badge }}">{{ $st !== '' ? $st : '-' }}</span>
                   </td>
                   <td>{{ $e['keterangan'] ?? '-' }}</td>
                   <td class="text-end">
-                    @if(!empty($e['link']))
-                      <a class="btn btn-sm btn-outline-primary" href="{{ $e['link'] }}">Detail</a>
+                    @if($hasModFilter)
+                      {{-- Bila sedang filter per modul, arahkan ke detail per-modul --}}
+                      @if($urlMod)
+                        <a class="btn btn-sm btn-outline-primary" href="{{ $urlMod }}">
+                          Detail
+                        </a>
+                      @endif
+                    @else
+                      {{-- Tanpa filter modul: beri opsi ALL vs MODUL --}}
+                      <div class="btn-group">
+                        <a class="btn btn-sm btn-outline-primary" href="{{ $urlAll }}">Detail</a>
+                        <button type="button" class="btn btn-sm btn-outline-primary dropdown-toggle dropdown-toggle-split" data-bs-toggle="dropdown" aria-expanded="false">
+                          <span class="visually-hidden">Toggle Dropdown</span>
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                          @if($urlAll)
+                            <li>
+                              <a class="dropdown-item" href="{{ $urlAll }}">
+                                Detail (Semua Modul)
+                              </a>
+                            </li>
+                          @endif
+                          @if($urlMod)
+                            <li>
+                              <a class="dropdown-item" href="{{ $urlMod }}">
+                                Detail (Modul: {{ $e['modul'] }})
+                              </a>
+                            </li>
+                          @endif
+                        </ul>
+                      </div>
                     @endif
                   </td>
                 </tr>
               @empty
-                <tr><td colspan="8" class="text-center text-muted">Belum ada data.</td></tr>
+                <tr><td colspan="8" class="text-center text-muted py-2">Belum ada data.</td></tr>
               @endforelse
               </tbody>
             </table>
@@ -200,6 +238,7 @@
     .filter-toolbar { flex-direction:column; align-items:stretch !important; }
     .filter-toolbar > div { width:100% !important; }
   }
+  .table thead th { white-space: nowrap; }
 </style>
 
 {{-- aktifkan feather icon --}}

@@ -809,4 +809,69 @@ class RiwayatController extends Controller
         // fallback HTML
         return view('riwayat.pdf', $viewData);
     }
+
+    /* =================== TAMBAHAN: agar route/fitur baru aman =================== */
+
+    /** Show by kode → redirect ke detail */
+    public function show(Request $r, string $kode)
+    {
+        // Kode format: PB-02 atau PB-02.1
+        if (preg_match('/^PB-(\d{2})(?:\.(\d+))?$/', $kode, $m)) {
+            $bahanId = (int)$m[1];
+            $ulangKe = isset($m[2]) ? (int)$m[2] : 0;
+
+            $row = DB::table($this->tblPB.' as pb')
+                ->select('pb.id')
+                ->where('pb.bahan_id', $bahanId)
+                ->whereRaw('COALESCE(pb.ulang_ke,0) = ?', [$ulangKe])
+                ->orderByDesc('pb.id')
+                ->first();
+
+            if ($row) {
+                $params = ['type' => 'pb', 'id' => $row->id, 'modul' => 'ALL'];
+                if ($r->has('origin')) $params['origin'] = $r->query('origin');
+                return redirect()->route('riwayat.detail', $params);
+            }
+        }
+        abort(404);
+    }
+
+    /** Export DB mentah: table=permintaan_bahan|registrasi_nie (default permintaan_bahan) */
+    public function exportDb(Request $r)
+    {
+        $table = $r->query('table', $this->tblPB);
+        $table = in_array($table, [$this->tblPB, $this->tblReg], true) ? $table : $this->tblPB;
+
+        $cols = Schema::getColumnListing($table);
+        $filename = 'dump_'.$table.'_'.now()->format('Ymd_His').'.csv';
+
+        return response()->streamDownload(function () use ($table, $cols) {
+            @set_time_limit(0);
+            @ini_set('memory_limit', '1024M');
+
+            $out = fopen('php://output', 'w');
+            echo "\xEF\xBB\xBF";
+            fputcsv($out, $cols);
+
+            DB::table($table)
+                ->orderBy('id')
+                ->chunk(500, function ($chunk) use ($out, $cols) {
+                    foreach ($chunk as $row) {
+                        $line = [];
+                        foreach ($cols as $c) {
+                            $val = $row->{$c} ?? null;
+                            if (is_array($val) || is_object($val)) $val = json_encode($val, JSON_UNESCAPED_UNICODE);
+                            $line[] = $this->csvSanitize((string)$val);
+                        }
+                        fputcsv($out, $line);
+                    }
+                });
+
+            fclose($out);
+        }, $filename, [
+            'Content-Type'        => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+            'Cache-Control'       => 'no-store, no-cache',
+        ]);
+    }
 }

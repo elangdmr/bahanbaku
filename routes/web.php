@@ -79,6 +79,9 @@ Route::middleware(['auth'])->group(function () {
     // scope=filtered       -> sesuai query string (q, modul, from, to)
     Route::get('/riwayat/export.csv', [RiwayatController::class, 'export'])->name('riwayat.export');
 
+    // === (BARU) Export CSV: dump tabel DB apa adanya (permintaan_bahan / registrasi_nie)
+    Route::get('/riwayat/export-db.csv', [RiwayatController::class, 'exportDb'])->name('riwayat.export.db');
+
     /* ======================= ADMIN + R&D (modul kerja) ======================= */
     Route::middleware('role:Admin,R&D')->group(function () {
 
