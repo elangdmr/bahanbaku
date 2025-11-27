@@ -15,7 +15,7 @@ Clone the project
 Go to the project directory
 
 ```bash
-  cd laravel_lms_sman12
+  cd bahanbaku
 ```
 
 Install dependencies
